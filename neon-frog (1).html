@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Неон-Лягушка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    background:#04120e;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  #stage {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#04120e;
+  }
+  #game {
+    background:#04120e;
+    display:block;
+    touch-action:none;
+    box-shadow: 0 0 60px rgba(0,0,0,0.6) inset;
+  }
+  .hud {
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between;
+    padding: 14px 18px;
+    pointer-events:none;
+    font-weight:700;
+    color:#d8ffe9;
+    text-shadow: 0 0 8px rgba(57,255,20,0.5);
+    z-index:5;
+    font-size: 15px;
+    letter-spacing: 0.5px;
+    gap: 8px;
+  }
+  .hud-left, .hud-right { display:flex; gap:8px; align-items:center; }
+  .hud .pill {
+    background: rgba(6,30,24,0.55);
+    border: 1px solid rgba(57,255,20,0.35);
+    border-radius: 20px;
+    padding: 6px 14px;
+    backdrop-filter: blur(3px);
+    display:flex; align-items:center; gap:6px;
+  }
+  .hud .pill.clickable { pointer-events:auto; cursor:pointer; user-select:none; }
+  .overlay {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    background: radial-gradient(circle at 50% 30%, rgba(10,50,40,0.55), rgba(2,10,8,0.92));
+    color:#eafff2;
+    z-index:10;
+    padding: 24px;
+  }
+  .hidden { display:none !important; }
+  .title {
+    font-size: 30px;
+    font-weight: 800;
+    color:#7CFF3A;
+    text-shadow: 0 0 12px #39ff14, 0 0 30px rgba(57,255,20,0.6);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #a9d8c4;
+    max-width: 270px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .frog-emoji-preview {
+    font-size: 44px;
+    margin-bottom: 4px;
+    filter: drop-shadow(0 0 14px #39ff14);
+  }
+  .loadout-row { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; justify-content:center; }
+  button.play-btn {
+    background: linear-gradient(180deg, #4dff5a, #23c93a);
+    border: none;
+    color: #04210f;
+    font-weight: 800;
+    font-size: 17px;
+    padding: 14px 42px;
+    border-radius: 30px;
+    box-shadow: 0 0 24px rgba(57,255,20,0.55), 0 6px 0 #178226;
+    cursor:pointer;
+    letter-spacing: 0.5px;
+  }
+  button.play-btn:active { transform: translateY(4px); box-shadow: 0 0 24px rgba(57,255,20,0.55), 0 2px 0 #178226; }
+  button.play-btn.secondary {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(57,255,20,0.4);
+    color: #bff7d0;
+    box-shadow:none;
+    margin-top:12px;
+    font-size:14px;
+    padding:10px 30px;
+  }
+  button.play-btn.secondary:active { transform: translateY(2px); box-shadow:none; }
+  .score-big {
+    font-size: 42px;
+    font-weight: 800;
+    color: #7CFF3A;
+    text-shadow: 0 0 14px #39ff14;
+    margin: 10px 0 2px;
+  }
+  .score-label { font-size: 13px; color:#a9d8c4; letter-spacing:1px; text-transform:uppercase; }
+  .best-row { font-size: 14px; color:#ffd23f; margin-top: 8px; text-shadow: 0 0 8px rgba(255,210,63,0.6); }
+  .hint {
+    position:absolute; bottom: 18px; left:0; right:0;
+    text-align:center; font-size:12px; color: rgba(200,255,220,0.55);
+    z-index:5; pointer-events:none;
+    letter-spacing: 0.3px;
+  }
+
+  /* ---- Shop ---- */
+  .shop-header { display:flex; align-items:center; justify-content:space-between; width:100%; max-width:360px; margin-bottom:12px; }
+  .shop-title { font-size:22px; font-weight:800; color:#7CFF3A; text-shadow:0 0 10px #39ff14; letter-spacing:1px; }
+  .shop-tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tab-btn {
+    background: rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.12);
+    color:#a9d8c4;
+    padding:8px 20px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .tab-btn.active { background: rgba(57,255,20,0.15); border-color:#39ff14; color:#eafff2; }
+  .shop-list {
+    width:100%; max-width:360px;
+    max-height: 42vh;
+    overflow-y:auto;
+    display:flex; flex-direction:column; gap:10px;
+    margin-bottom: 14px;
+    padding-right:2px;
+  }
+  .shop-card {
+    display:flex; align-items:center; gap:12px;
+    background: rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:16px;
+    padding:10px 12px;
+    text-align:left;
+  }
+  .shop-card.active { border-color:#39ff14; background: rgba(57,255,20,0.08); }
+  .shop-icon {
+    width:42px; height:42px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+    background: rgba(255,255,255,0.06);
+    box-shadow: 0 0 10px var(--glow, #39ff14);
+    flex-shrink:0;
+  }
+  .shop-info { flex:1; min-width:0; }
+  .shop-name { font-size:14px; font-weight:700; color:#eafff2; }
+  .shop-desc { font-size:11px; color:#a9d8c4; margin-top:2px; line-height:1.3; }
+  .mini-btn {
+    background: linear-gradient(180deg,#4dff5a,#23c93a);
+    border:none; color:#04210f; font-weight:800; font-size:11px;
+    padding:8px 12px; border-radius:14px; cursor:pointer; white-space:nowrap;
+    flex-shrink:0;
+  }
+  .mini-btn.disabled { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.35); cursor:not-allowed; }
+  .mini-btn.equipped { background: rgba(57,255,20,0.15); border:1px solid #39ff14; color:#7CFF3A; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="hud-left">
+      <div class="pill">🌿 <span id="scoreVal">0</span></div>
+      <div class="pill">🐞 <span id="bugVal">0</span></div>
+    </div>
+    <div class="hud-right">
+      <div class="pill clickable" id="muteBtn">🔊</div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">◄ тапни слева — прыжок влево &nbsp;&nbsp;|&nbsp;&nbsp; тапни справа ► &nbsp;&nbsp;|&nbsp;&nbsp; берегись стрекоз 🦟</div>
+
+  <div class="overlay" id="startScreen">
+    <div class="frog-emoji-preview">🐸</div>
+    <div class="title">НЕОН-ЛЯГУШКА</div>
+    <div class="subtitle">Прыгай по листьям лотоса, собирай светящихся букашек комбо за комбо и уворачивайся от стрекоз!</div>
+    <div class="loadout-row">
+      <div class="pill">🐞 <span id="menuCurrency">0</span></div>
+      <div class="pill" id="menuPerkPill">✖️ Без усиления</div>
+    </div>
+    <button class="play-btn" id="playBtn">ИГРАТЬ</button>
+    <button class="play-btn secondary" id="shopBtn">🏪 МАГАЗИН</button>
+    <div class="best-row" id="startBest" style="opacity:0;">Рекорд: 0</div>
+  </div>
+
+  <div class="overlay hidden" id="overScreen">
+    <div class="score-label" id="overLabel">Твой результат</div>
+    <div class="score-big" id="finalScore">0</div>
+    <div class="best-row" id="bestRow">Рекорд: 0</div>
+    <div class="best-row" id="bugsEarnedRow" style="color:#bff7d0;"></div>
+    <button class="play-btn" id="retryBtn" style="margin-top:22px;">ЕЩЁ РАЗ</button>
+    <button class="play-btn secondary" id="shopBtnOver">🏪 МАГАЗИН</button>
+  </div>
+
+  <div class="overlay hidden" id="shopScreen">
+    <div class="shop-header">
+      <div class="shop-title">МАГАЗИН</div>
+      <div class="pill">🐞 <span id="shopCurrency">0</span></div>
+    </div>
+    <div class="shop-tabs">
+      <button class="tab-btn active" data-tab="skins">Скины</button>
+      <button class="tab-btn" data-tab="perks">Усиления</button>
+    </div>
+    <div class="shop-list" id="shopList"></div>
+    <button class="play-btn secondary" id="shopBackBtn">‹ НАЗАД</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Telegram integration ----------
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if (tg) {
+    try {
+      tg.ready();
+      tg.expand();
+      if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+      if (tg.setBackgroundColor) tg.setBackgroundColor('#04120e');
+      if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
+    } catch(e) {}
+  }
+
+  // ---------- Persistent progress ----------
+  let bestScore = 0;
+  let totalBugs = 0;
+  let ownedSkins = new Set(['classic']);
+  let ownedPerks = new Set(['none']);
+  let selectedPerkId = 'none';
+
+  function cloudSet(key, val){
+    if (tg && tg.CloudStorage && tg.CloudStorage.setItem) tg.CloudStorage.setItem(key, val);
+  }
+  function saveBest(){ cloudSet('bestScore', String(bestScore)); }
+  function saveMuted(){ cloudSet('muted', String(SFX.isMuted())); }
+  function saveTotalBugs(){ cloudSet('totalBugs', String(totalBugs)); }
+  function saveOwnedSkins(){ cloudSet('ownedSkins', JSON.stringify(Array.from(ownedSkins))); }
+  function saveOwnedPerks(){ cloudSet('ownedPerks', JSON.stringify(Array.from(ownedPerks))); }
+  function saveSelectedPerk(){ cloudSet('selectedPerk', selectedPerkId); }
+  function saveSelectedSkin(){ cloudSet('selectedSkin', SKINS[selectedSkin].id); }
+
+  function applyLoadedValues(values){
+    if (!values) return;
+    if (values.bestScore) bestScore = parseInt(values.bestScore,10) || 0;
+    if (values.muted === 'true') SFX.setMuted(true);
+    if (values.totalBugs) totalBugs = parseInt(values.totalBugs,10) || 0;
+    if (values.ownedSkins) { try { JSON.parse(values.ownedSkins).forEach(id=>ownedSkins.add(id)); } catch(e){} }
+    if (values.ownedPerks) { try { JSON.parse(values.ownedPerks).forEach(id=>ownedPerks.add(id)); } catch(e){} }
+    if (values.selectedPerk && ownedPerks.has(values.selectedPerk)) selectedPerkId = values.selectedPerk;
+    if (values.selectedSkin) {
+      const idx = SKINS.findIndex(s=>s.id===values.selectedSkin);
+      if (idx>=0 && ownedSkins.has(values.selectedSkin)) selectedSkin = idx;
+    }
+  }
+
+  function loadSettings(cb){
+    const keys = ['bestScore','muted','totalBugs','ownedSkins','ownedPerks','selectedPerk','selectedSkin'];
+    if (tg && tg.CloudStorage && tg.CloudStorage.getItems) {
+      tg.CloudStorage.getItems(keys, function(err, values){
+        if (!err) applyLoadedValues(values);
+        cb && cb();
+      });
+    } else if (tg && tg.CloudStorage && tg.CloudStorage.getItem) {
+      const result = {};
+      let idx = 0;
+      (function next(){
+        if (idx >= keys.length) { applyLoadedValues(result); cb && cb(); return; }
+        const k = keys[idx++];
+        tg.CloudStorage.getItem(k, function(err, val){ if (!err && val) result[k] = val; next(); });
+      })();
+    } else { cb && cb(); }
+  }
+
+  // ---------- Audio (synthesized, no external files) ----------
+  const SFX = (function(){
+    let ctx=null, muted=false;
+    function ensure(){
+      if (!ctx) { try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }
+    function tone(freq,dur,type,vol,glide){
+      if (muted) return;
+      ensure(); if (!ctx) return;
+      const t0 = ctx.currentTime;
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      if (glide) osc.frequency.exponentialRampToValueAtTime(Math.max(glide,1), t0+dur);
+      gain.gain.setValueAtTime(vol||0.2, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0+dur+0.02);
+    }
+    function noiseBurst(dur,vol){
+      if (muted) return;
+      ensure(); if (!ctx) return;
+      const bufferSize = Math.floor(ctx.sampleRate*dur);
+      const buffer = ctx.createBuffer(1,bufferSize,ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      const src = ctx.createBufferSource(); src.buffer = buffer;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(vol||0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
+      src.connect(gain); gain.connect(ctx.destination);
+      src.start();
+    }
+    return {
+      ensure,
+      jump(){ tone(420,0.12,'sine',0.16,680); },
+      bigJump(){ tone(500,0.24,'sine',0.2,950); tone(760,0.18,'triangle',0.1,1150); },
+      collect(mult){ tone(560+mult*80,0.13,'square',0.14,900+mult*130); },
+      hit(){ noiseBurst(0.35,0.28); tone(180,0.4,'sawtooth',0.18,55); },
+      splash(){ tone(240,0.35,'sine',0.18,70); },
+      click(){ tone(320,0.05,'sine',0.1); },
+      buy(){ tone(500,0.1,'sine',0.15,750); tone(750,0.12,'sine',0.12,1000); },
+      shieldBreak(){ tone(700,0.15,'triangle',0.2,300); noiseBurst(0.15,0.15); },
+      setMuted(v){ muted = v; },
+      isMuted(){ return muted; }
+    };
+  })();
+
+  function unlockAudioOnce(){
+    SFX.ensure();
+    window.removeEventListener('touchstart', unlockAudioOnce);
+    window.removeEventListener('mousedown', unlockAudioOnce);
+  }
+  window.addEventListener('touchstart', unlockAudioOnce, {once:true});
+  window.addEventListener('mousedown', unlockAudioOnce, {once:true});
+
+  const muteBtn = document.getElementById('muteBtn');
+  function updateMuteBtn(){ muteBtn.textContent = SFX.isMuted() ? '🔇' : '🔊'; }
+  muteBtn.addEventListener('click', function(){
+    SFX.setMuted(!SFX.isMuted());
+    updateMuteBtn();
+    saveMuted();
+    if (!SFX.isMuted()) SFX.click();
+  });
+
+  // ---------- Frog skins ----------
+  const SKINS = [
+    { id:'classic',  name:'Классик',    cost:0,   glow:'#39ff14', body:['#9dffb0','#39ff14','#1fae12'], leg:'#2ecf3a', spot:'rgba(180,255,90,0.9)',  belly:'rgba(230,255,235,0.85)' },
+    { id:'toxic',    name:'Токсик',     cost:150, glow:'#c026ff', body:['#e6b8ff','#b026ff','#6d0fae'], leg:'#9a1fd6', spot:'rgba(255,140,255,0.9)', belly:'rgba(245,225,255,0.85)' },
+    { id:'electric', name:'Электрик',   cost:200, glow:'#00e5ff', body:['#b8f5ff','#00c3e5','#0077a8'], leg:'#00a4c2', spot:'rgba(160,255,255,0.9)', belly:'rgba(220,250,255,0.85)' },
+    { id:'midnight', name:'Полуночная', cost:280, glow:'#7d5fff', body:['#7d63d6','#3a2f66','#181233'], leg:'#241a55', spot:'rgba(190,160,255,0.9)', belly:'rgba(90,75,150,0.85)' },
+    { id:'gold',     name:'Золотой',    cost:400, glow:'#ffd23f', body:['#fff2c0','#ffd23f','#c98f10'], leg:'#e0a825', spot:'rgba(255,255,255,0.9)', belly:'rgba(255,246,215,0.9)' },
+    { id:'rainbow',  name:'Радужный',   cost:650, glow:'#ff5ec4', body:['#fff','#fff','#fff'], leg:'#fff', spot:'rgba(255,255,255,0.9)', belly:'rgba(255,255,255,0.85)', rainbow:true }
+  ];
+  let selectedSkin = 0;
+
+  // ---------- Power-ups ----------
+  const PERKS = [
+    { id:'none',   name:'Без усиления', desc:'Играть как обычно', cost:0,   icon:'✖️' },
+    { id:'boost',  name:'Высокий старт', desc:'Начинаешь забег с бонусом +300 к высоте', cost:150, icon:'🚀' },
+    { id:'magnet', name:'Магнит', desc:'Притягивает букашек издалека весь забег', cost:200, icon:'🧲' },
+    { id:'shield', name:'Второй шанс', desc:'Переживёшь одно столкновение со стрекозой за забег', cost:300, icon:'🛡️' }
+  ];
+
+  // ---------- Shop UI ----------
+  let shopTab = 'skins';
+  let shopReturnScreen = 'start';
+  const shopScreen = document.getElementById('shopScreen');
+
+  function renderShop(){
+    document.getElementById('shopCurrency').textContent = totalBugs;
+    const list = document.getElementById('shopList');
+    list.innerHTML = '';
+    const items = shopTab === 'skins' ? SKINS : PERKS;
+    const ownedSet = shopTab === 'skins' ? ownedSkins : ownedPerks;
+    items.forEach(function(item){
+      const owned = ownedSet.has(item.id);
+      const isSelected = shopTab === 'skins' ? (SKINS[selectedSkin].id === item.id) : (selectedPerkId === item.id);
+      const card = document.createElement('div');
+      card.className = 'shop-card' + (isSelected ? ' active' : '');
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'shop-icon';
+      iconWrap.style.setProperty('--glow', item.glow || '#39ff14');
+      iconWrap.textContent = shopTab === 'skins' ? '🐸' : item.icon;
+
+      const info = document.createElement('div');
+      info.className = 'shop-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'shop-name';
+      nameEl.textContent = item.name;
+      info.appendChild(nameEl);
+      if (item.desc) {
+        const descEl = document.createElement('div');
+        descEl.className = 'shop-desc';
+        descEl.textContent = item.desc;
+        info.appendChild(descEl);
+      }
+
+      const btn = document.createElement('button');
+      if (owned) {
+        btn.className = 'mini-btn' + (isSelected ? ' equipped' : '');
+        btn.textContent = isSelected ? 'Выбрано' : 'Выбрать';
+        if (isSelected) btn.disabled = true;
+      } else {
+        const afford = totalBugs >= item.cost;
+        btn.className = 'mini-btn' + (afford ? '' : ' disabled');
+        btn.textContent = 'Купить · 🐞' + item.cost;
+      }
+      btn.addEventListener('click', function(){ handleShopAction(item, owned); });
+
+      card.appendChild(iconWrap);
+      card.appendChild(info);
+      card.appendChild(btn);
+      list.appendChild(card);
+    });
+  }
+
+  function handleShopAction(item, owned){
+    if (owned) {
+      SFX.click();
+      if (shopTab === 'skins') {
+        selectedSkin = SKINS.findIndex(function(s){ return s.id === item.id; });
+        saveSelectedSkin();
+      } else {
+        selectedPerkId = item.id;
+        saveSelectedPerk();
+      }
+      renderShop();
+    } else {
+      if (totalBugs < item.cost) return;
+      totalBugs -= item.cost;
+      saveTotalBugs();
+      if (shopTab === 'skins') { ownedSkins.add(item.id); saveOwnedSkins(); }
+      else { ownedPerks.add(item.id); saveOwnedPerks(); }
+      SFX.buy();
+      renderShop();
+    }
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      shopTab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      SFX.click();
+      renderShop();
+    });
+  });
+
+  function openShop(fromOver){
+    shopReturnScreen = fromOver ? 'over' : 'start';
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    shopScreen.classList.remove('hidden');
+    shopTab = 'skins';
+    document.querySelectorAll('.tab-btn').forEach(function(b,i){ b.classList.toggle('active', i===0); });
+    renderShop();
+  }
+  function closeShop(){
+    shopScreen.classList.add('hidden');
+    if (shopReturnScreen === 'over') { overScreen.classList.remove('hidden'); }
+    else { updateMenuUI(); startScreen.classList.remove('hidden'); }
+  }
+
+  function updateMenuUI(){
+    document.getElementById('menuCurrency').textContent = totalBugs;
+    const perk = PERKS.find(function(p){ return p.id === selectedPerkId; }) || PERKS[0];
+    document.getElementById('menuPerkPill').textContent = perk.icon + ' ' + perk.name;
+    const el = document.getElementById('startBest');
+    if (bestScore > 0) { el.textContent = 'Рекорд: ' + bestScore; el.style.opacity = '1'; }
+  }
+
+  // ---------- Canvas setup ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+
+  function resize(){
+    const maxW = 480;
+    const cssW = Math.min(window.innerWidth, maxW);
+    const cssH = window.innerHeight;
+    DPR = window.devicePixelRatio || 1;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    canvas.width = cssW * DPR;
+    canvas.height = cssH * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    W = cssW; H = cssH;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Config ----------
+  const GRAVITY = 0.42;
+  const MOVE_SPEED = 4.6;
+  const JUMP_V = -13.5;
+  const BIG_JUMP_V = -18.5;
+  const PLAYER_W = 40, PLAYER_H = 34;
+  const COMBO_WINDOW = 1800;
+
+  // ---------- State ----------
+  let state = 'start'; // start | playing | over
+  let player, platforms, bugs, dragonflies, particles, ambient, clouds, fogLayers, moon;
+  let score, bugCount, scrollAccum, highestPlatformY, frame;
+  let comboCount, lastBugTime;
+  let shieldUsedThisRun, invulnFrames;
+  let inputDir = 0;
+  let lastTime = 0;
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function resetGame(){
+    player = { x: W/2 - PLAYER_W/2, y: H*0.55, vx: 0, vy: JUMP_V, squash: 1 };
+    platforms = [];
+    bugs = [];
+    dragonflies = [];
+    particles = [];
+    ambient = [];
+    clouds = [];
+    fogLayers = [];
+    score = (selectedPerkId === 'boost') ? 300 : 0;
+    bugCount = 0;
+    scrollAccum = 0;
+    frame = 0;
+    comboCount = 0;
+    lastBugTime = -99999;
+    shieldUsedThisRun = false;
+    invulnFrames = 0;
+
+    moon = { x: W*0.76, y: H*0.13, r: 28 };
+
+    for (let i=0;i<5;i++){
+      clouds.push({ x: rand(0,W), y: rand(20,110), w: rand(70,140), h: rand(14,22), speed: rand(0.06,0.16), opacity: rand(0.12,0.25) });
+    }
+    for (let i=0;i<6;i++){
+      fogLayers.push({ x: rand(0,W), y: rand(H*0.55,H*0.95), r: rand(60,130), speed: rand(0.08,0.2)*(Math.random()<0.5?1:-1), opacity: rand(0.05,0.12) });
+    }
+    for (let i=0;i<18;i++){
+      ambient.push({ x: rand(0,W), y: rand(0,H), r: rand(0.6,1.8), phase: rand(0,Math.PI*2), speed: rand(0.1,0.3) });
+    }
+
+    let y = H - 30;
+    platforms.push({ x: W/2 - 45, y: y, w:90, h:26, type:'normal', dx:0, flower:false });
+    highestPlatformY = y;
+    while (highestPlatformY > -50) spawnPlatformAbove();
+    updateHUD();
+  }
+
+  function difficultyFactor(){ return Math.min(1, score / 4000); }
+
+  function spawnPlatformAbove(){
+    const df = difficultyFactor();
+    const gap = rand(70,110) + df*40;
+    const y = highestPlatformY - gap;
+    const w = rand(64,92) - df*14;
+    const x = rand(10, W - w - 10);
+    const roll = Math.random();
+    let type = 'normal', dx = 0, flower = false;
+    if (roll < 0.16 + df*0.15) { type='moving'; dx = (Math.random()<0.5?-1:1) * rand(1.0,2.0); }
+    else if (roll < 0.24) { flower = true; }
+    platforms.push({ x, y, w, h:24, type, dx, flower });
+    highestPlatformY = y;
+
+    if (Math.random() < 0.42) {
+      bugs.push({ x: x + w/2 + rand(-20,20), y: y - rand(34,60), r:7, phase: rand(0,Math.PI*2), collected:false });
+    }
+    maybeSpawnDragonfly(df);
+  }
+
+  function maybeSpawnDragonfly(df){
+    if (frame < 90) return;
+    const cap = 2 + Math.floor(df*2);
+    if (dragonflies.length >= cap) return;
+    const chance = 0.10 + df*0.16;
+    if (Math.random() < chance) {
+      dragonflies.push({
+        x: Math.random()<0.5 ? -40 : W+40,
+        baseY: highestPlatformY + rand(25,55),
+        dx: (Math.random()<0.5?1:-1) * rand(1.6,2.6),
+        phase: rand(0,Math.PI*2),
+        wingPhase: 0
+      });
+    }
+  }
+
+  function updateHUD(){
+    document.getElementById('scoreVal').textContent = Math.floor(score);
+    document.getElementById('bugVal').textContent = bugCount;
+  }
+
+  // ---------- Input ----------
+  function setDirFromClientX(clientX){
+    const rect = canvas.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    inputDir = (localX < W/2) ? -1 : 1;
+  }
+  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); if (state==='playing') setDirFromClientX(e.touches[0].clientX); }, {passive:false});
+  canvas.addEventListener('touchmove', function(e){ e.preventDefault(); if (state==='playing') setDirFromClientX(e.touches[0].clientX); }, {passive:false});
+  canvas.addEventListener('touchend', function(e){ e.preventDefault(); inputDir = 0; }, {passive:false});
+  canvas.addEventListener('mousedown', function(e){ if (state==='playing') setDirFromClientX(e.clientX); });
+  window.addEventListener('mouseup', function(){ inputDir = 0; });
+  canvas.addEventListener('mousemove', function(e){ if (state==='playing' && e.buttons===1) setDirFromClientX(e.clientX); });
+  window.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') inputDir = -1;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') inputDir = 1;
+  });
+  window.addEventListener('keyup', function(e){
+    if (['ArrowLeft','a','A','ArrowRight','d','D'].includes(e.key)) inputDir = 0;
+  });
+
+  // ---------- Particles ----------
+  function burst(x,y,color,count){
+    for (let i=0;i<count;i++){
+      particles.push({ type:'dot', x, y, vx: rand(-2.5,2.5), vy: rand(-3.5,-0.5), life:1, color, r: rand(1.5,3) });
+    }
+  }
+  function floatText(x,y,text,color){
+    particles.push({ type:'text', x, y, vy:-1.2, life:1, text, color });
+  }
+
+  // ---------- Update ----------
+  function update(){
+    frame++;
+    if (invulnFrames > 0) invulnFrames--;
+
+    const targetVx = inputDir * MOVE_SPEED;
+    player.vx += (targetVx - player.vx) * 0.35;
+    player.x += player.vx;
+    if (player.x + PLAYER_W < 0) player.x = W;
+    else if (player.x > W) player.x = -PLAYER_W;
+
+    player.vy += GRAVITY;
+    player.y += player.vy;
+    player.squash += ((player.vy < 0 ? 1.15 : 0.9) - player.squash) * 0.2;
+
+    if (player.vy > 0) {
+      for (const p of platforms) {
+        const footY = player.y + PLAYER_H;
+        if (footY > p.y && footY < p.y + p.h + 14 &&
+            player.x + PLAYER_W*0.7 > p.x && player.x + PLAYER_W*0.3 < p.x + p.w) {
+          if (p.flower) {
+            player.vy = BIG_JUMP_V;
+            score += 40;
+            burst(player.x+PLAYER_W/2, p.y, '#ffd23f', 14);
+            SFX.bigJump();
+          } else {
+            player.vy = JUMP_V;
+            burst(player.x+PLAYER_W/2, p.y, '#bff7d0', 6);
+            SFX.jump();
+          }
+          break;
+        }
+      }
+    }
+
+    for (const p of platforms) {
+      if (p.type === 'moving') {
+        p.x += p.dx;
+        if (p.x < 6 || p.x + p.w > W-6) p.dx *= -1;
+      }
+    }
+
+    for (const d of dragonflies) {
+      d.x += d.dx;
+      d.wingPhase += 0.9;
+    }
+
+    // dragonfly collision
+    if (invulnFrames <= 0) {
+      for (const d of dragonflies) {
+        const dyy = d.baseY + Math.sin(frame*0.05 + d.phase)*10;
+        const dx = (player.x+PLAYER_W/2) - d.x;
+        const dy = (player.y+PLAYER_H/2) - dyy;
+        if (Math.hypot(dx,dy) < 21) {
+          if (selectedPerkId === 'shield' && !shieldUsedThisRun) {
+            shieldUsedThisRun = true;
+            invulnFrames = 90;
+            d.x = -500; // remove this dragonfly from play
+            burst(player.x+PLAYER_W/2, player.y+PLAYER_H/2, '#8fe8ff', 18);
+            SFX.shieldBreak();
+          } else {
+            burst(player.x+PLAYER_W/2, player.y+PLAYER_H/2, '#ff5e3a', 16);
+            SFX.hit();
+            endGame('dragonfly');
+            return;
+          }
+          break;
+        }
+      }
+    }
+
+    // camera scroll
+    const threshold = H * 0.45;
+    if (player.y < threshold) {
+      const delta = threshold - player.y;
+      player.y = threshold;
+      for (const p of platforms) p.y += delta;
+      for (const b of bugs) b.y += delta;
+      for (const d of dragonflies) d.baseY += delta;
+      for (const pt of particles) pt.y += delta;
+      for (const a of ambient) a.y += delta*0.4;
+      for (const c of clouds) c.y += delta*0.02;
+      for (const f of fogLayers) f.y += delta*0.1;
+      highestPlatformY += delta;
+      scrollAccum += delta;
+      score += delta * 0.12;
+    }
+
+    while (highestPlatformY > -60) spawnPlatformAbove();
+    platforms = platforms.filter(p => p.y < H + 40);
+    bugs = bugs.filter(b => b.y < H + 40 && !b.collected);
+    dragonflies = dragonflies.filter(d => d.baseY < H + 60 && d.x > -80 && d.x < W + 80);
+
+    // bug collection + combo
+    const collectRadius = (selectedPerkId === 'magnet') ? 72 : 26;
+    for (const b of bugs) {
+      if (b.collected) continue;
+      const dx = (player.x+PLAYER_W/2) - b.x;
+      const dy = (player.y+PLAYER_H/2) - (b.y + Math.sin(frame*0.08+b.phase)*4);
+      if (Math.hypot(dx,dy) < collectRadius) {
+        b.collected = true;
+        bugCount++;
+        const now = performance.now();
+        comboCount = (now - lastBugTime < COMBO_WINDOW) ? comboCount+1 : 1;
+        lastBugTime = now;
+        const mult = Math.min(comboCount,5);
+        const gained = 25*mult;
+        score += gained;
+        const skin = SKINS[selectedSkin];
+        burst(b.x, b.y, skin.rainbow ? '#ff5ec4' : skin.glow, 10);
+        floatText(b.x, b.y-14, '+'+gained+(mult>1?' x'+mult:''), mult>1 ? '#ffd23f' : '#bff7d0');
+        SFX.collect(mult);
+      }
+    }
+
+    for (const pt of particles) {
+      if (pt.type === 'text') { pt.y += pt.vy; pt.vy *= 0.97; pt.life -= 0.018; }
+      else { pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.15; pt.life -= 0.03; }
+    }
+    particles = particles.filter(pt => pt.life > 0);
+
+    for (const a of ambient) { a.phase += a.speed*0.02; if (a.y > H) a.y = -5; }
+
+    updateHUD();
+
+    if (player.y > H + 50) endGame('fall');
+  }
+
+  function updateAtmosphere(){
+    for (const c of clouds) { c.x += c.speed; if (c.x - c.w > W) c.x = -c.w; }
+    for (const f of fogLayers) {
+      f.x += f.speed;
+      if (f.x - f.r > W) f.x = -f.r;
+      if (f.x + f.r < 0) f.x = W + f.r;
+    }
+  }
+
+  // ---------- Draw ----------
+  function drawMoon(){
+    const g = ctx.createRadialGradient(moon.x,moon.y,4, moon.x,moon.y, moon.r*3.2);
+    g.addColorStop(0,'rgba(255,255,240,0.85)');
+    g.addColorStop(0.3,'rgba(255,255,240,0.3)');
+    g.addColorStop(1,'rgba(255,255,240,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(moon.x,moon.y,moon.r*3.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.fillStyle = '#fffef0'; ctx.arc(moon.x,moon.y,moon.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(210,210,190,0.4)';
+    ctx.beginPath(); ctx.arc(moon.x-8,moon.y-6,4,0,Math.PI*2); ctx.arc(moon.x+6,moon.y+8,3,0,Math.PI*2); ctx.fill();
+  }
+  function drawClouds(){
+    for (const c of clouds) {
+      ctx.fillStyle = `rgba(200,220,215,${c.opacity})`;
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, c.w/2, c.h/2, 0,0,Math.PI*2);
+      ctx.ellipse(c.x+c.w*0.3, c.y-c.h*0.15, c.w/3, c.h/2.2, 0,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+  function drawFog(){
+    for (const f of fogLayers) {
+      const g = ctx.createRadialGradient(f.x,f.y,0, f.x,f.y,f.r);
+      g.addColorStop(0, `rgba(140,200,180,${f.opacity})`);
+      g.addColorStop(1, 'rgba(140,200,180,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill();
+    }
+  }
+  function drawBackground(){
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, '#06251c');
+    g.addColorStop(0.55, '#04160f');
+    g.addColorStop(1, '#020b08');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    drawMoon();
+    drawClouds();
+    drawFog();
+
+    for (const a of ambient) {
+      const alpha = 0.25 + 0.25*Math.sin(a.phase);
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(120,255,150,${alpha})`;
+      ctx.shadowColor = '#39ff14';
+      ctx.shadowBlur = 8;
+      ctx.arc(a.x, a.y, a.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function drawLotus(p){
+    ctx.save();
+    ctx.translate(p.x + p.w/2, p.y + p.h/2);
+    const w = p.w, h = p.h;
+    ctx.shadowColor = p.flower ? '#ffd23f' : '#1a5c3a';
+    ctx.shadowBlur = p.flower ? 16 : 6;
+
+    ctx.beginPath();
+    ctx.ellipse(0,0, w/2, h/2, 0, 0, Math.PI*2);
+    const lg = ctx.createRadialGradient(-w/4,-h/4,2, 0,0, w/1.3);
+    lg.addColorStop(0, p.flower ? '#3fae5c' : '#2f7a4d');
+    lg.addColorStop(1, p.flower ? '#1c6b3a' : '#134f2e');
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(w/2 - 2, -h/6);
+    ctx.lineTo(w/2 - 2, h/6);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(3,20,12,0.55)';
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(200,255,220,0.18)';
+    ctx.lineWidth = 1;
+    for (let a=-1; a<=1; a++){
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.lineTo(Math.cos(a*0.6)* -w/2.3, Math.sin(a*0.6)*h/2.3);
+      ctx.stroke();
+    }
+
+    if (p.flower) {
+      ctx.shadowBlur = 10;
+      for (let i=0;i<5;i++){
+        const ang = (i/5)*Math.PI*2;
+        ctx.beginPath();
+        ctx.fillStyle = '#ff8fd6';
+        ctx.ellipse(Math.cos(ang)*7, -h/6 + Math.sin(ang)*5, 5, 8, ang, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.fillStyle = '#ffd23f';
+      ctx.arc(0,-h/6,4,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawBug(b){
+    if (b.collected) return;
+    const bob = Math.sin(frame*0.08 + b.phase) * 4;
+    const x = b.x, y = b.y + bob;
+    ctx.save();
+    ctx.shadowColor = '#7CFF3A';
+    ctx.shadowBlur = 14;
+    const flap = Math.sin(frame*0.35 + b.phase)*0.4;
+    ctx.fillStyle = 'rgba(180,255,210,0.35)';
+    ctx.beginPath(); ctx.ellipse(x-6, y-2, 6, 3, 0.5+flap, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x+6, y-2, 6, 3, -0.5-flap, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath(); ctx.ellipse(x,y,5,6,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#2a1a00';
+    ctx.beginPath(); ctx.arc(x-2,y-2,1,0,Math.PI*2); ctx.arc(x+2,y-2,1,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDragonfly(d){
+    const y = d.baseY + Math.sin(frame*0.05 + d.phase)*10;
+    ctx.save();
+    ctx.translate(d.x, y);
+    ctx.scale(d.dx<0?-1:1, 1);
+    ctx.shadowColor = '#ff5e3a';
+    ctx.shadowBlur = 14;
+    const flap = Math.sin(d.wingPhase)*0.5;
+    ctx.fillStyle = 'rgba(255,200,180,0.35)';
+    ctx.beginPath(); ctx.ellipse(-4,-9,13,5, -0.3+flap, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4,-9,13,5, 0.3-flap, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-4,9,11,4, -0.2-flap, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4,9,11,4, 0.2+flap, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ff5e3a';
+    ctx.beginPath(); ctx.ellipse(0,0,6,16,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffb347';
+    ctx.beginPath(); ctx.arc(0,-16,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3a0000';
+    ctx.beginPath(); ctx.arc(-3,-17,2,0,Math.PI*2); ctx.arc(3,-17,2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFrog(){
+    const skin = SKINS[selectedSkin];
+    ctx.save();
+    const cx = player.x + PLAYER_W/2;
+    const cy = player.y + PLAYER_H/2;
+    const jumping = player.vy < -2;
+    const falling = player.vy > 4;
+
+    ctx.translate(cx, cy);
+    ctx.scale(player.vx < -0.3 ? -1 : 1, 1);
+    ctx.scale(1/player.squash, player.squash);
+
+    if (invulnFrames > 0) ctx.globalAlpha = 0.5 + 0.5*Math.sin(frame*0.6);
+
+    let glowColor = skin.glow, c0 = skin.body[0], c1 = skin.body[1], c2 = skin.body[2];
+    if (skin.rainbow) {
+      const hue = (frame*2) % 360;
+      glowColor = `hsl(${hue},95%,60%)`;
+      c0 = `hsl(${hue},90%,85%)`;
+      c1 = `hsl(${hue},90%,60%)`;
+      c2 = `hsl(${(hue+30)%360},80%,40%)`;
+    }
+
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 22;
+
+    ctx.fillStyle = skin.rainbow ? `hsl(${(frame*2+40)%360},80%,55%)` : skin.leg;
+    ctx.beginPath();
+    ctx.ellipse(-PLAYER_W*0.28, PLAYER_H*0.32, 8, 5, 0.6, 0, Math.PI*2);
+    ctx.ellipse(PLAYER_W*0.28, PLAYER_H*0.32, 8, 5, -0.6, 0, Math.PI*2);
+    ctx.fill();
+
+    const bodyGrad = ctx.createRadialGradient(-6,-8,2, 0,0, PLAYER_W*0.7);
+    bodyGrad.addColorStop(0, c0);
+    bodyGrad.addColorStop(0.55, c1);
+    bodyGrad.addColorStop(1, c2);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 2, PLAYER_W*0.42, PLAYER_H*0.42, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = skin.belly;
+    ctx.beginPath();
+    ctx.ellipse(0, PLAYER_H*0.18, PLAYER_W*0.24, PLAYER_H*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = skin.rainbow ? `hsl(${(frame*2+180)%360},90%,75%)` : skin.spot;
+    ctx.beginPath();
+    ctx.arc(-9, -10, 3, 0, Math.PI*2);
+    ctx.arc(10, -4, 2.2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = '#eafff0';
+    ctx.beginPath();
+    ctx.arc(-9, -PLAYER_H*0.34, 7, 0, Math.PI*2);
+    ctx.arc(9, -PLAYER_H*0.34, 7, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#0a2b12';
+    const pupilShift = falling ? 1.5 : 0;
+    ctx.beginPath();
+    ctx.arc(-9+pupilShift, -PLAYER_H*0.34, 3.2, 0, Math.PI*2);
+    ctx.arc(9+pupilShift, -PLAYER_H*0.34, 3.2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = skin.rainbow ? `hsl(${(frame*2+40)%360},80%,55%)` : skin.leg;
+    const legSpread = jumping ? 12 : (falling ? 6 : 9);
+    ctx.beginPath();
+    ctx.ellipse(-PLAYER_W*0.42, -legSpread*0.1, 6, 4, 1.0, 0, Math.PI*2);
+    ctx.ellipse(PLAYER_W*0.42, -legSpread*0.1, 6, 4, -1.0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawParticles(){
+    for (const p of particles) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(p.life,0);
+      if (p.type === 'text') {
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.font = '700 15px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y);
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function draw(){
+    drawBackground();
+    for (const p of platforms) drawLotus(p);
+    for (const b of bugs) drawBug(b);
+    for (const d of dragonflies) drawDragonfly(d);
+    drawFrog();
+    drawParticles();
+  }
+
+  // ---------- Loop ----------
+  function loop(ts){
+    if (!lastTime) lastTime = ts;
+    lastTime = ts;
+    updateAtmosphere();
+    if (state === 'playing') update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Screens ----------
+  const startScreen = document.getElementById('startScreen');
+  const overScreen = document.getElementById('overScreen');
+  const hint = document.getElementById('hint');
+
+  function startGame(){
+    SFX.click();
+    resetGame();
+    state = 'playing';
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    hint.style.opacity = '1';
+    hint.style.transition = '';
+    setTimeout(()=>{ hint.style.transition='opacity 1s'; hint.style.opacity='0'; }, 2600);
+  }
+
+  function endGame(cause){
+    if (state !== 'playing') return;
+    state = 'over';
+    if (cause === 'fall') SFX.splash();
+    const finalScoreVal = Math.floor(score);
+    if (finalScoreVal > bestScore) {
+      bestScore = finalScoreVal;
+      saveBest();
+    }
+    totalBugs += bugCount;
+    saveTotalBugs();
+
+    document.getElementById('overLabel').textContent = cause === 'dragonfly' ? 'Стрекоза тебя поймала!' : 'Ты упал в пруд!';
+    document.getElementById('finalScore').textContent = finalScoreVal;
+    document.getElementById('bestRow').textContent = 'Рекорд: ' + bestScore;
+    document.getElementById('bugsEarnedRow').textContent = '🐞 Собрано: ' + bugCount + ' · Всего: ' + totalBugs;
+    overScreen.classList.remove('hidden');
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('error'); } catch(e){} }
+  }
+
+  document.getElementById('playBtn').addEventListener('click', startGame);
+  document.getElementById('retryBtn').addEventListener('click', startGame);
+  document.getElementById('shopBtn').addEventListener('click', function(){ SFX.click(); openShop(false); });
+  document.getElementById('shopBtnOver').addEventListener('click', function(){ SFX.click(); openShop(true); });
+  document.getElementById('shopBackBtn').addEventListener('click', function(){ SFX.click(); closeShop(); });
+
+  updateMuteBtn();
+  updateMenuUI();
+  loadSettings(function(){
+    updateMuteBtn();
+    updateMenuUI();
+  });
+
+  resetGame();
+  draw();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
